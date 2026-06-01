@@ -150,7 +150,7 @@ def extract():
                 "yt-dlp",
                 "--no-playlist",
                 "--no-warnings",
-                "--format", "bestaudio",
+                "--format", "bestaudio/best",
                 "--no-post-overwrites",
                 "-o", output_template,
                 *get_ytdlp_client_args(),
