@@ -26,6 +26,14 @@ app = Flask(__name__)
 
 MAX_DURATION_SECONDS = 600  # 10 minutes max
 
+# ── Proxy configuration ───────────────────────────────────────────────────────
+PROXY_URL = os.environ.get("PROXY_URL", "").strip()
+
+def get_ytdlp_proxy_args():
+    if PROXY_URL:
+        return ["--proxy", PROXY_URL]
+    return []
+
 # ── CORS — applied manually to every response ─────────────────────────────────
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
@@ -66,6 +74,7 @@ def get_video_info(url: str) -> dict:
             "--no-playlist",
             "--no-warnings",
             "--no-check-certificates",
+            *get_ytdlp_proxy_args(),
             url,
         ],
         capture_output=True, text=True, timeout=30,
@@ -132,6 +141,7 @@ def extract():
                 "--audio-format", "wav",
                 "--audio-quality", "0",
                 "--postprocessor-args", "ffmpeg:-ar 44100 -ac 2",
+                *get_ytdlp_proxy_args(),
                 "-o", tmp_path,
                 url,
             ],
