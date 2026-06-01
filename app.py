@@ -10,10 +10,17 @@ Endpoints:
 
 import os
 import re
+import sys
 import json
 import subprocess
 import tempfile
 from flask import Flask, request, jsonify, send_file, make_response
+
+# ── Auto-update yt-dlp on every startup ──────────────────────────────────────
+subprocess.run(
+    [sys.executable, "-m", "pip", "install", "--upgrade", "yt-dlp", "-q"],
+    capture_output=True,
+)
 
 app = Flask(__name__)
 
@@ -53,7 +60,14 @@ def is_valid_youtube_url(url: str) -> bool:
 
 def get_video_info(url: str) -> dict:
     result = subprocess.run(
-        ["yt-dlp", "--dump-json", "--no-playlist", "--no-warnings", url],
+        [
+            "yt-dlp",
+            "--dump-json",
+            "--no-playlist",
+            "--no-warnings",
+            "--no-check-certificates",
+            url,
+        ],
         capture_output=True, text=True, timeout=30,
     )
     if result.returncode != 0:
@@ -111,6 +125,9 @@ def extract():
                 "yt-dlp",
                 "--no-playlist",
                 "--no-warnings",
+                "--no-check-certificates",
+                "--prefer-free-formats",
+                "--format", "bestaudio",
                 "-x",
                 "--audio-format", "wav",
                 "--audio-quality", "0",
