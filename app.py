@@ -14,6 +14,7 @@ import sys
 import json
 import subprocess
 import tempfile
+import glob
 from flask import Flask, request, jsonify, send_file, make_response
 
 # ── Auto-update yt-dlp on every startup ──────────────────────────────────────
@@ -106,7 +107,7 @@ def info():
     try:
         meta = get_video_info(url)
         if meta["duration"] > MAX_DURATION_SECONDS:
-            return jsonify({"error": f"Video too long (max {MAX_DURATION_SECONDS // 60} minutes)"}), 400
+            return jsonify({"error": f"Video too long (max {MAX_DURATION_SECONDS // 3600} hours)"}), 400
         return jsonify(meta)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -123,12 +124,13 @@ def extract():
     try:
         meta = get_video_info(url)
         if meta["duration"] > MAX_DURATION_SECONDS:
-            return jsonify({"error": f"Video too long (max {MAX_DURATION_SECONDS // 60} minutes)"}), 400
+            return jsonify({"error": f"Video too long (max {MAX_DURATION_SECONDS // 3600} hours)"}), 400
 
-        tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-        tmp_path = tmp.name
-        tmp.close()
+        # Create temp directory for download
+        tmp_dir = tempfile.mkdtemp()
+        output_template = os.path.join(tmp_dir, "audio.%(ext)s")
 
+        # Download raw best audio without post-processing conversion
         result = subprocess.run(
             [
                 "yt-dlp",
@@ -137,28 +139,28 @@ def extract():
                 "--no-check-certificates",
                 "--prefer-free-formats",
                 "--format", "bestaudio",
-                "-x",
-                "--audio-format", "wav",
-                "--audio-quality", "0",
-                "--postprocessor-args", "ffmpeg:-ar 44100 -ac 2",
+                "--no-post-overwrites",
+                "-o", output_template,
                 *get_ytdlp_proxy_args(),
-                "-o", tmp_path,
                 url,
             ],
-            capture_output=True, text=True, timeout=180,
+            capture_output=True, text=True, timeout=300,
         )
 
-        actual_path = tmp_path
-        for candidate in [tmp_path, tmp_path + ".wav", tmp_path.replace(".wav", "") + ".wav"]:
-            if os.path.exists(candidate) and os.path.getsize(candidate) > 0:
-                actual_path = candidate
-                break
-        else:
+        # Find downloaded file (any extension)
+        downloaded_files = glob.glob(os.path.join(tmp_dir, "audio.*"))
+        if not downloaded_files:
             return jsonify({"error": "Audio extraction failed", "detail": result.stderr[-500:]}), 500
+
+        downloaded_file = downloaded_files[0]
+
+        if not os.path.exists(downloaded_file) or os.path.getsize(downloaded_file) == 0:
+            return jsonify({"error": "Downloaded file is empty"}), 500
 
         def cleanup():
             try:
-                os.unlink(actual_path)
+                import shutil
+                shutil.rmtree(tmp_dir, ignore_errors=True)
             except Exception:
                 pass
 
@@ -166,10 +168,10 @@ def extract():
         channel_safe = meta["channel"].encode("ascii", "ignore").decode()[:100]
 
         response = make_response(send_file(
-            actual_path,
-            mimetype="audio/wav",
+            downloaded_file,
+            mimetype="audio/webm",
             as_attachment=False,
-            download_name="audio.wav",
+            download_name="audio" + os.path.splitext(downloaded_file)[1],
         ))
         response.headers["X-Video-Title"] = title_safe
         response.headers["X-Video-Duration"] = str(meta["duration"])
@@ -184,5 +186,5 @@ def extract():
 
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port, debug=False)
