@@ -24,7 +24,7 @@ subprocess.run(
 
 app = Flask(__name__)
 
-MAX_DURATION_SECONDS = 7200  # 2 hours max
+MAX_DURATION_SECONDS = 43200  # 12 hours max
 
 # ── Proxy configuration ───────────────────────────────────────────────────────
 PROXY_URL = os.environ.get("PROXY_URL", "").strip()
